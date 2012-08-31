@@ -3,13 +3,12 @@ package main
 import (
     "os"
     "io"
-	"fmt"
-    "time"
+    "fmt"
     "bytes"
-    "strings"
-    "os/exec"
+    //"strings"
     "net/mail"
-    "crypto/sha1"
+    "net/smtp"
+    "log/syslog"
     "text/template"
     "code.google.com/p/go.crypto/openpgp"
     "code.google.com/p/go.crypto/openpgp/armor"
@@ -22,8 +21,8 @@ type PGPMimeData struct {
 }
 
 var cmdEncrypt = &Command{
-	Name: "encrypt",
-	Run:  runEncrypt,
+    Name: "encrypt",
+    Run:  runEncrypt,
 }
 
 // template for mail header Content-Type.
@@ -58,14 +57,17 @@ func runEncrypt(cmd *Command, args []string) {
     // buffer for pgp/mime formated message
     msgbuffer := bytes.NewBuffer(nil)
 
+    msgid := generateRandomString()[:8]
+    logger, _ := syslog.New(SyslogLevel, "postcrypt")
+
     // read mail from stdin into buffer
     io.Copy(original, os.Stdin)
 
     // send original message in case something goes wrong
     defer func() {
         if err := recover(); err != nil {
-            fmt.Printf("error: %s\n", err)
-            sendMail(original, args)
+            logger.Err(fmt.Sprintf("[%s] error: %s\n", msgid, err))
+            sendMail(msgid, original, args)
         }
     }()
 
@@ -84,6 +86,9 @@ func runEncrypt(cmd *Command, args []string) {
 
     // see if key is known so we can encrypt mail
     if entity := getKeyByEmail(keyring, args); entity != nil {
+        keyid := fmt.Sprintf("%X", entity.PrimaryKey.KeyId)
+        logger.Info(fmt.Sprintf("[%s] encrypting message with key %s", msgid, keyid[:8]))
+
         to := []*openpgp.Entity{entity}
 
         // parse mail format (split in header and body mostly)
@@ -126,29 +131,50 @@ func runEncrypt(cmd *Command, args []string) {
         printHeaders(msgbuffer, msg.Header, data)
         mailbody.Execute(msgbuffer, data)
 
-        sendMail(msgbuffer, args)
+        sendMail(msgid, msgbuffer, args)
     } else {
         // could not find key, so leave mail as it was
-        sendMail(original, args)
+        sendMail(msgid, original, args)
     }
 }
 
-func sendMail(r io.Reader, recipients []string) {
-        // sendmail command to relay message
-        sendmail := exec.Command("sendmail", "-G", "-i", strings.Join(recipients, " "))
-        w, err := sendmail.StdinPipe()
+func sendMail(msgid string, r io.Reader, args []string) {
+        logger, _ := syslog.New(SyslogLevel, "postcrypt")
+        defer func() {
+            if err := recover(); err != nil {
+                logger.Err(fmt.Sprintf("[%s] error: %s\n", msgid, err))
+            }
+        }()
+
+        from := args[0]
+        to := args[1:]
+
+        // connect to smtp
+        c, err := smtp.Dial("127.0.0.1:10029")
         if err != nil {
-            fmt.Printf("error: %s\n", err)
-            return
+            panic(err)
         }
 
-        // write mail to sendmail's stdin
-        sendmail.Start()
+        // sender
+        if err = c.Mail(from); err != nil {
+            panic(err)
+        }
+
+        // recipients
+        for _, addr := range to {
+            if err = c.Rcpt(addr); err != nil {
+                panic(err)
+            }
+        }
+
+        // mail
+        w, err := c.Data()
+        if err != nil {
+            panic(err)
+        }
         io.Copy(w, r)
 
-        // close output and wait for sendmail to deliver mail
-        w.Close()
-        sendmail.Wait()
+        c.Quit()
 }
 
 // Prints the mail header and sets Content-Type to PGP/Mime.
@@ -182,7 +208,6 @@ func getKeyByEmail(keyring openpgp.EntityList, emails []string) *openpgp.Entity 
 // Generates a pseudo-random mime boundary string. A prefix can be supplied to
 // customize the boundary with e.g. the program name
 func generateBoundary(prefix string) string {
-    hash := sha1.New()
-    io.WriteString(hash, time.Now().String())
-    return fmt.Sprintf("%s-%x", prefix, hash.Sum(nil)[:10])
+    hash := generateRandomString()
+    return fmt.Sprintf("%s-%x", prefix, hash[:10])
 }

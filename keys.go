@@ -24,7 +24,7 @@ func runAddKey(cmd *Command, args []string) {
     }
 
     fmt.Printf("adding key %s ...\n", args[0])
-    exe := exec.Command("gpg", "--keyring", "./keyring.gpg", "--no-default-keyring", "--recv-keys", args[0])
+    exe := exec.Command("gpg", "--keyring", KeyringPath, "--no-default-keyring", "--recv-keys", args[0])
     err := exe.Run()
     if err != nil {
         fmt.Printf("error: gpg returned: %s\n", err)
