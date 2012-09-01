@@ -5,7 +5,6 @@ import (
     "io"
     "fmt"
     "bytes"
-    //"strings"
     "net/mail"
     "net/smtp"
     "log/syslog"
@@ -21,8 +20,11 @@ type PGPMimeData struct {
 }
 
 var cmdEncrypt = &Command{
-    Name: "encrypt",
     Run:  runEncrypt,
+
+    Name: "encrypt",
+    Short: "encrypts mails from stdin with PGP/MIME",
+    Long: "",
 }
 
 // template for mail header Content-Type.
@@ -58,7 +60,8 @@ func runEncrypt(cmd *Command, args []string) {
     msgbuffer := bytes.NewBuffer(nil)
 
     msgid := generateRandomString()[:8]
-    logger, _ := syslog.New(SyslogLevel, "postcrypt")
+    logger, _ := syslog.New(syslog.LOG_INFO, "postcrypt")
+    logger.Info(fmt.Sprintf("Encrypting message with id %s", msgid))
 
     // read mail from stdin into buffer
     io.Copy(original, os.Stdin)
@@ -66,13 +69,20 @@ func runEncrypt(cmd *Command, args []string) {
     // send original message in case something goes wrong
     defer func() {
         if err := recover(); err != nil {
-            logger.Err(fmt.Sprintf("[%s] error: %s\n", msgid, err))
+            logger.Err(fmt.Sprintf("[%s] Error: %s\n", msgid, err))
             sendMail(msgid, original, args)
         }
     }()
 
+    // get path to keyring from configruation
+    path, err := config.GetString("", "keyring")
+    if err != nil {
+        logger.Err(fmt.Sprintf("[%s] Could not read configuration `keyring`\n", msgid))
+        panic(err)
+    }
+
     // open gpg keyring file
-    keyringFile, err := os.Open(KeyringPath)
+    keyringFile, err := os.Open(path)
     if err != nil {
         panic(err)
     }
@@ -85,9 +95,10 @@ func runEncrypt(cmd *Command, args []string) {
     }
 
     // see if key is known so we can encrypt mail
-    if entity := getKeyByEmail(keyring, args); entity != nil {
+    recipients := args[1:]
+    if entity := getKeyByEmail(keyring, recipients); entity != nil {
         keyid := fmt.Sprintf("%X", entity.PrimaryKey.KeyId)
-        logger.Info(fmt.Sprintf("[%s] encrypting message with key %s", msgid, keyid[:8]))
+        logger.Info(fmt.Sprintf("[%s] Using key %s for encryption", msgid, keyid[:8]))
 
         to := []*openpgp.Entity{entity}
 
@@ -139,18 +150,20 @@ func runEncrypt(cmd *Command, args []string) {
 }
 
 func sendMail(msgid string, r io.Reader, args []string) {
-        logger, _ := syslog.New(SyslogLevel, "postcrypt")
-        defer func() {
-            if err := recover(); err != nil {
-                logger.Err(fmt.Sprintf("[%s] error: %s\n", msgid, err))
-            }
-        }()
+        logger, _ := syslog.New(syslog.LOG_INFO, "postcrypt")
 
         from := args[0]
-        to := args[1:]
+        recipients := args[1:]
+
+        // get address of smtp service to send mail to
+        addr, err := config.GetString("", "smtp")
+        if err != nil {
+            logger.Err(fmt.Sprintf("[%s] Could not read configuration `smtp`\n", msgid))
+            panic(err)
+        }
 
         // connect to smtp
-        c, err := smtp.Dial("127.0.0.1:10029")
+        c, err := smtp.Dial(addr)
         if err != nil {
             panic(err)
         }
@@ -161,7 +174,7 @@ func sendMail(msgid string, r io.Reader, args []string) {
         }
 
         // recipients
-        for _, addr := range to {
+        for _, addr := range recipients {
             if err = c.Rcpt(addr); err != nil {
                 panic(err)
             }
@@ -174,6 +187,7 @@ func sendMail(msgid string, r io.Reader, args []string) {
         }
         io.Copy(w, r)
 
+        logger.Info(fmt.Sprintf("[%s] Delivered mail to sendmail (%s)", msgid, addr))
         c.Quit()
 }
 
@@ -188,21 +202,6 @@ func printHeaders(w io.Writer, header mail.Header, data *PGPMimeData) {
             fmt.Fprintf(w, "%s: %s\n", key, value)
         }
     }
-}
-
-// Return the first Entity from keyring wich matches the given email address.
-func getKeyByEmail(keyring openpgp.EntityList, emails []string) *openpgp.Entity {
-    for _, entity := range keyring {
-        for _, ident := range entity.Identities {
-            for _, email := range emails {
-                if ident.UserId.Email == email {
-                    return entity
-                }
-            }
-        }
-    }
-
-    return nil
 }
 
 // Generates a pseudo-random mime boundary string. A prefix can be supplied to
