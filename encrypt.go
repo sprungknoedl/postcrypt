@@ -62,7 +62,7 @@ Content-Disposition: inline; filename="encrypted.asc"
 
 {{ .Message }}
 
-{{ .Boundary }}
+{{ .Boundary }}--
 `))
 
 // Encrypts a mail from stdin and forwards it to postfix.
