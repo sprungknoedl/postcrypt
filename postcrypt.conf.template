@@ -1,0 +1,10 @@
+[default]
+# Address where postcrypt should forward mails to.
+# This should be the same as you configured in
+# postfix's master.cf, or else you will loose mails.
+smtp = 127.0.0.1:10029
+
+# Path where postcrypt should place its gpg keyring.
+# It is recommend to place this in the home directory
+# of your dedicated postcrypt user
+keyring = /var/lib/postcrypt/keyring.gpg

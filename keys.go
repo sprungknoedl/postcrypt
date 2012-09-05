@@ -13,7 +13,22 @@ var cmdAddKey = &Command{
 
     Name: "add-key",
     Short: "adds a key to postcrypt's gpg keyring",
-    Long: "",
+    Long: `
+Usage: postcrypt add-key <keyid>
+
+Help:
+Adds a key to postcrypt's keyring. The keyid can be specified by any format
+the gpg binary knows to add keys.
+
+This command is just a shortcut to:
+    
+    gpg --no-default-keyring --keyring $options[keyring] --recv-keys <keyid>
+
+The location of the keyring file can be changed via the configuration
+option "keyring".
+
+To print all keys postcrypt knows, see 'postcrypt help list-keys'.
+`,
 }
 
 var cmdListKeys = &Command{
@@ -21,7 +36,14 @@ var cmdListKeys = &Command{
 
     Name: "list-keys",
     Short: "prints all to postcrypt known public keys and identities",
-    Long: "",
+    Long: `
+Usage: postcrypt list-keys
+
+Help:
+Prints all to postcrypt known public keys and associated identities.
+
+To add keys, see 'postcrypt help add-key'.
+`,
 }
 
 func runAddKey(cmd *Command, args []string) {

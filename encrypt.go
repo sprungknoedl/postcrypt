@@ -24,7 +24,22 @@ var cmdEncrypt = &Command{
 
     Name: "encrypt",
     Short: "encrypts mails from stdin with PGP/MIME",
-    Long: "",
+    Long: `
+Usage: postcrypt encrypt <sender> <receivers>
+
+Help:
+Encrypts mails from stdin with PGP/MIME. The mails will be forwarded to
+<sender>. This address is best specified by postfix via the $sender variable.
+
+The mails will be encrypted for each receiver in <receivers> if a key is
+known to postcrypt. Receivers without a known key are ignored and may not
+be able to read the mails later!
+
+If no receiver has a key associated with them, the mail will be forwarded
+as is and no encryption takes place.
+
+To add keys, see 'postcrypt help add-key'.
+`,
 }
 
 // template for mail header Content-Type.
@@ -47,7 +62,7 @@ Content-Disposition: inline; filename="encrypted.asc"
 
 {{ .Message }}
 
-{{ .Boundary }}
+{{ .Boundary }}--
 `))
 
 // Encrypts a mail from stdin and forwards it to postfix.
