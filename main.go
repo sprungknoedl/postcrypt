@@ -33,7 +33,7 @@ var commands = []*Command{
 }
 
 // holds parsed configuration
-var config conf.ConfigFile
+var Config *conf.ConfigFile
 
 
 // commandline flags
@@ -100,8 +100,11 @@ func validateConfig(c *conf.ConfigFile) error {
 }
 
 func main() {
+    var err error
+    var args []string
+
     flag.Parse()
-    args := flag.Args()
+    args = flag.Args()
 
     // no subcommand given, so print usage
     if len(args) < 1 {
@@ -119,7 +122,7 @@ func main() {
     }
 
     // try to read configuration
-    config, err := conf.ReadConfigFile(*cfgPath)
+    Config, err = conf.ReadConfigFile(*cfgPath)
     if err != nil {
         fmt.Printf("error: could not read configuration. %s\n", err)
         return
@@ -127,7 +130,7 @@ func main() {
 
     // validate configuration file, see if all necessary options
     // are present
-    err = validateConfig(config)
+    err = validateConfig(Config)
     if err != nil {
         fmt.Printf("error: configuration not valid. %s\n", err)
         return

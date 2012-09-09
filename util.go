@@ -20,16 +20,21 @@ func generateRandomString() string {
 
 
 // Return the first Entity from keyring wich matches the given email address.
-func getKeyByEmail(keyring openpgp.EntityList, emails []string) *openpgp.Entity {
+func getKeysByEmail(keyring openpgp.EntityList, emails []string) []*openpgp.Entity {
+    var keys []*openpgp.Entity
+
     for _, entity := range keyring {
-        for _, ident := range entity.Identities {
+        for _, identity := range entity.Identities {
+
             for _, email := range emails {
-                if ident.UserId.Email == email {
-                    return entity
+                if identity.UserId.Email == email {
+                    keys = append(keys, entity)
+                    continue    // enough if one addr per key matches
                 }
             }
+
         }
     }
 
-    return nil
+    return keys
 }
