@@ -48,10 +48,10 @@ To add keys, see 'postcrypt help add-key'.
 
 func runAddKey(cmd *Command, args []string) {
     // get path to keyring from configruation
-    path, err := config.GetString("", "keyring")
+    path, err := Config.GetString("", "keyring")
     if err != nil {
         fmt.Printf("Error: Could not read configuration `keyring`. %s\n", err)
-        panic(err)
+        return
     }
 
     if len(args) < 1 {
@@ -70,7 +70,7 @@ func runAddKey(cmd *Command, args []string) {
 
 func runListKeys(cmd *Command, args []string) {
     // get path to keyring from configruation
-    path, err := config.GetString("", "keyring")
+    path, err := Config.GetString("", "keyring")
     if err != nil {
         fmt.Printf("Error: Could not read configuration `keyring`. %s\n", err)
         return

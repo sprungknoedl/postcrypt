@@ -6,7 +6,6 @@ import (
     "fmt"
     "bytes"
     "net/mail"
-    "net/smtp"
     "log/syslog"
     "text/template"
     "code.google.com/p/go.crypto/openpgp"
@@ -74,6 +73,9 @@ func runEncrypt(cmd *Command, args []string) {
     // buffer for pgp/mime formated message
     msgbuffer := bytes.NewBuffer(nil)
 
+    sender := args[0]
+    recipients := args[1:]
+
     msgid := generateRandomString()[:8]
     logger, _ := syslog.New(syslog.LOG_INFO, "postcrypt")
     logger.Info(fmt.Sprintf("Encrypting message with id %s", msgid))
@@ -85,12 +87,12 @@ func runEncrypt(cmd *Command, args []string) {
     defer func() {
         if err := recover(); err != nil {
             logger.Err(fmt.Sprintf("[%s] Error: %s\n", msgid, err))
-            sendMail(msgid, original, args)
+            sendMail(original, msgid, sender, recipients)
         }
     }()
 
     // get path to keyring from configruation
-    path, err := config.GetString("", "keyring")
+    path, err := Config.GetString("", "keyring")
     if err != nil {
         logger.Err(fmt.Sprintf("[%s] Could not read configuration `keyring`\n", msgid))
         panic(err)
@@ -110,12 +112,12 @@ func runEncrypt(cmd *Command, args []string) {
     }
 
     // see if key is known so we can encrypt mail
-    recipients := args[1:]
-    if entity := getKeyByEmail(keyring, recipients); entity != nil {
-        keyid := fmt.Sprintf("%X", entity.PrimaryKey.KeyId)
-        logger.Info(fmt.Sprintf("[%s] Using key %s for encryption", msgid, keyid[:8]))
+    if entities := getKeysByEmail(keyring, recipients); len(entities) > 0 {
+        for _, e := range entities {
+            keyid := fmt.Sprintf("%X", e.PrimaryKey.KeyId)
+            logger.Info(fmt.Sprintf("[%s] Encrypting mail with key: %s", msgid, keyid[:8]))
+        }
 
-        to := []*openpgp.Entity{entity}
 
         // parse mail format (split in header and body mostly)
         msg, err := mail.ReadMessage(original)
@@ -131,7 +133,7 @@ func runEncrypt(cmd *Command, args []string) {
         defer armored.Close()
 
         // setup encryption
-        crypter, err := openpgp.Encrypt(armored, to, nil, nil, nil)
+        crypter, err := openpgp.Encrypt(armored, entities, nil, nil, nil)
         if err != nil {
             panic(err)
         }
@@ -157,53 +159,11 @@ func runEncrypt(cmd *Command, args []string) {
         printHeaders(msgbuffer, msg.Header, data)
         mailbody.Execute(msgbuffer, data)
 
-        sendMail(msgid, msgbuffer, args)
+        sendMail(msgbuffer, msgid, sender, recipients)
     } else {
         // could not find key, so leave mail as it was
-        sendMail(msgid, original, args)
+        sendMail(original, msgid, sender, recipients)
     }
-}
-
-func sendMail(msgid string, r io.Reader, args []string) {
-        logger, _ := syslog.New(syslog.LOG_INFO, "postcrypt")
-
-        from := args[0]
-        recipients := args[1:]
-
-        // get address of smtp service to send mail to
-        addr, err := config.GetString("", "smtp")
-        if err != nil {
-            logger.Err(fmt.Sprintf("[%s] Could not read configuration `smtp`\n", msgid))
-            panic(err)
-        }
-
-        // connect to smtp
-        c, err := smtp.Dial(addr)
-        if err != nil {
-            panic(err)
-        }
-
-        // sender
-        if err = c.Mail(from); err != nil {
-            panic(err)
-        }
-
-        // recipients
-        for _, addr := range recipients {
-            if err = c.Rcpt(addr); err != nil {
-                panic(err)
-            }
-        }
-
-        // mail
-        w, err := c.Data()
-        if err != nil {
-            panic(err)
-        }
-        io.Copy(w, r)
-
-        logger.Info(fmt.Sprintf("[%s] Delivered mail to sendmail (%s)", msgid, addr))
-        c.Quit()
 }
 
 // Prints the mail header and sets Content-Type to PGP/Mime.
