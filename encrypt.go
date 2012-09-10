@@ -5,6 +5,7 @@ import (
     "io"
     "fmt"
     "bytes"
+    "strings"
     "net/mail"
     "log/syslog"
     "text/template"
@@ -91,6 +92,22 @@ func runEncrypt(cmd *Command, args []string) {
         }
     }()
 
+    // parse mail format (split in header and body mostly)
+    msg, err := mail.ReadMessage(original)
+    if err != nil {
+        panic(err)
+    }
+
+    // preserve content-type in encrypted message
+    contenttype := msg.Header.Get("Content-Type")
+
+    // skip message if allready encrypted
+    if strings.Contains(contenttype, "multipart/encrypted") {
+        logger.Info(fmt.Sprintf("[%s] Message allready encrypted, skipping\n", msgid))
+        sendMail(original, msgid, sender, recipients)
+        return
+    }
+
     // get path to keyring from configruation
     path, err := Config.GetString("", "keyring")
     if err != nil {
@@ -116,13 +133,6 @@ func runEncrypt(cmd *Command, args []string) {
         for _, e := range entities {
             keyid := fmt.Sprintf("%X", e.PrimaryKey.KeyId)
             logger.Info(fmt.Sprintf("[%s] Encrypting mail with key: %s", msgid, keyid[:8]))
-        }
-
-
-        // parse mail format (split in header and body mostly)
-        msg, err := mail.ReadMessage(original)
-        if err != nil {
-            panic(err)
         }
 
         // setup armored output encoding
