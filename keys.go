@@ -1,19 +1,19 @@
 package main
 
 import (
-    "fmt"
-    "os"
-    "os/exec"
+	"fmt"
+	"os"
+	"os/exec"
 
-    "code.google.com/p/go.crypto/openpgp"
+	"code.google.com/p/go.crypto/openpgp"
 )
 
 var cmdAddKey = &Command{
-    Run: runAddKey,
+	Run: runAddKey,
 
-    Name: "add-key",
-    Short: "adds a key to postcrypt's gpg keyring",
-    Long: `
+	Name:  "add-key",
+	Short: "adds a key to postcrypt's gpg keyring",
+	Long: `
 Usage: postcrypt add-key <keyid>
 
 Help:
@@ -32,11 +32,11 @@ To print all keys postcrypt knows, see 'postcrypt help list-keys'.
 }
 
 var cmdListKeys = &Command{
-    Run: runListKeys,
+	Run: runListKeys,
 
-    Name: "list-keys",
-    Short: "prints all to postcrypt known public keys and identities",
-    Long: `
+	Name:  "list-keys",
+	Short: "prints all to postcrypt known public keys and identities",
+	Long: `
 Usage: postcrypt list-keys
 
 Help:
@@ -47,55 +47,50 @@ To add keys, see 'postcrypt help add-key'.
 }
 
 func runAddKey(cmd *Command, args []string) {
-    // get path to keyring from configruation
-    path, err := Config.GetString("", "keyring")
-    if err != nil {
-        fmt.Printf("Error: Could not read configuration `keyring`. %s\n", err)
-        return
-    }
+	var err error
 
-    if len(args) < 1 {
-        fmt.Printf("Error: To few arguments. Run `go help %s`\n", cmd.Name)
-        return
-    }
+	log := NewTee("postcrypt")
+	path, _ := Config.GetString("", "keyring")
 
-    fmt.Printf("adding key %s ...\n", args[0])
-    exe := exec.Command("gpg", "--keyring", path, "--no-default-keyring", "--recv-keys", args[0])
-    err = exe.Run()
-    if err != nil {
-        fmt.Printf("Error: gpg returned: %s\n", err)
-        return
-    }
+	if len(args) < 1 {
+		log.Err("too few arguments. run `go help " + cmd.Name + "`.")
+		return
+	}
+
+	log.Info("Adding key " + args[0])
+
+	exe := exec.Command("gpg", "--keyring", path, "--no-default-keyring", "--recv-keys", args[0])
+	err = exe.Run()
+	if err != nil {
+		log.Err("gpg returned: " + err.Error())
+		return
+	}
 }
 
 func runListKeys(cmd *Command, args []string) {
-    // get path to keyring from configruation
-    path, err := Config.GetString("", "keyring")
-    if err != nil {
-        fmt.Printf("Error: Could not read configuration `keyring`. %s\n", err)
-        return
-    }
+	var err error
 
-    // open gpg keyring file
-    keyringFile, err := os.Open(path)
-    if err != nil {
-        fmt.Printf("Error: %s\n", err)
-        return
-    }
+	log := NewTee("postcrypt")
+	path, _ := Config.GetString("", "keyring")
 
-    // read keyring
-    keyring, err := openpgp.ReadKeyRing(keyringFile)
-    if err != nil {
-        fmt.Printf("Error: %s\n", err)
-        return
-    }
-    defer keyringFile.Close()
+	// open gpg keyring file
+	fh, _ := os.Open(path)
+	if err != nil {
+		log.Crit("could not open keyring: " + err.Error())
+		return
+	}
 
-    for _, entity := range keyring {
-        keyid := fmt.Sprintf("%X", entity.PrimaryKey.KeyId)
-        fmt.Printf("%s:\n", keyid[8:])
-        for _, ident := range entity.Identities {
-            fmt.Printf("\t%s\n", ident.Name)
-        }
-    }
+	// read keyring
+	keyring, err := openpgp.ReadKeyRing(fh)
+	if err != nil {
+		log.Crit("could not read keyring: " + err.Error())
+		return
+	}
+
+	for _, entity := range keyring {
+		fmt.Printf("%s:\n", getKeyId(entity))
+		for _, ident := range entity.Identities {
+			fmt.Printf("\t%s\n", ident.Name)
+		}
+	}
 }
