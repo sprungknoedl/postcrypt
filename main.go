@@ -31,12 +31,6 @@ var commands = []*Command{
 	cmdListKeys,
 }
 
-// holds parsed configuration
-var Config *conf.ConfigFile
-
-// commandline flags
-var cfgPath = flag.String("config", "/etc/postcrypt.conf", "specify an alternative configuration file")
-
 //
 // --- functions ---
 //
@@ -95,9 +89,13 @@ func validateConfig(c *conf.ConfigFile) error {
 	return nil
 }
 
+// commandline flags
+var cfgPath = flag.String("config", "/etc/postcrypt.conf", "specify an alternative configuration file")
+
 func main() {
 	var err error
 	var args []string
+    var config *conf.ConfigFile
 
 	log := NewTee("postcrypt")
 
@@ -120,7 +118,7 @@ func main() {
 	}
 
 	// try to read configuration
-	Config, err = conf.ReadConfigFile(*cfgPath)
+	config, err = conf.ReadConfigFile(*cfgPath)
 	if err != nil {
 		log.Crit("could not read configuration. " + err.Error())
 		return
@@ -128,7 +126,7 @@ func main() {
 
 	// validate configuration file, see if all necessary options
 	// are present
-	err = validateConfig(Config)
+	err = validateConfig(config)
 	if err != nil {
 		log.Crit("configuration not valid. " + err.Error())
 		return
@@ -137,6 +135,7 @@ func main() {
 	// execute command
 	for _, cmd := range commands {
 		if cmd.Name == args[0] && cmd.Run != nil {
+            cmd.Config = config
 			cmd.Run(cmd, args[1:])
 			return
 		}

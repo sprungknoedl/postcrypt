@@ -75,7 +75,6 @@ type TemplateData struct {
 func runEncrypt(cmd *Command, args []string) {
 	var err error
 	var e Envelope
-	var c *conf.ConfigFile
 	var keys openpgp.EntityList
 
 	log := NewTee("postcrypt")
@@ -86,8 +85,6 @@ func runEncrypt(cmd *Command, args []string) {
 		return
 	}
 
-	c = cmd.Config
-
 	e.Sender = args[0]
 	e.Recipients = args[1:]
 	e.Mail, err = readMail()
@@ -97,7 +94,7 @@ func runEncrypt(cmd *Command, args []string) {
 	}
 
 	if !isEncrypted(e) {
-		keys = getKeys(c, e)
+		keys = getKeys(cmd.Config, e)
 		if len(keys) > 0 {
 			for _, k := range keys {
 				log.Info(id + " encrypting with key " + getKeyId(k))
@@ -107,7 +104,7 @@ func runEncrypt(cmd *Command, args []string) {
 			encrypted, err = encryptMail(e, keys)
 			if err != nil {
 				log.Err(id + "error encrypting mail. " + err.Error())
-				sendMail(c, e)
+				sendMail(cmd.Config, e)
 			}
 
 			e = packMail(e, encrypted)
@@ -118,7 +115,7 @@ func runEncrypt(cmd *Command, args []string) {
 		log.Info(id + " already encrypted, sending unmodified")
     }
 
-	err = sendMail(c, e)
+	err = sendMail(cmd.Config, e)
     if err != nil {
         log.Crit(id + " sending mail failed. " + err.Error())
     }
@@ -223,7 +220,8 @@ func serializeMail(e Envelope) *bytes.Buffer {
 	}
 
 	// body
-	fmt.Fprintf(buffer, "%s", e.Mail.Body)
+    io.Copy(buffer, e.Mail.Body)
+    //fmt.Fprintf(buffer, "%s", e.Mail.Body.String())
 
 	return buffer
 }

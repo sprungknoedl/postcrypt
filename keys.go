@@ -50,7 +50,7 @@ func runAddKey(cmd *Command, args []string) {
 	var err error
 
 	log := NewTee("postcrypt")
-	path, _ := Config.GetString("", "keyring")
+	path, _ := cmd.Config.GetString("", "keyring")
 
 	if len(args) < 1 {
 		log.Err("too few arguments. run `go help " + cmd.Name + "`.")
@@ -71,7 +71,7 @@ func runListKeys(cmd *Command, args []string) {
 	var err error
 
 	log := NewTee("postcrypt")
-	path, _ := Config.GetString("", "keyring")
+	path, _ := cmd.Config.GetString("", "keyring")
 
 	// open gpg keyring file
 	fh, _ := os.Open(path)
