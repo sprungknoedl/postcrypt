@@ -62,24 +62,28 @@ Content-Disposition: inline; filename="encrypted.asc"
 `))
 
 type Envelope struct {
-	Mail       *mail.Message
-	Sender     string
-	Recipients []string
+	Id			string
+	Mail		*mail.Message
+	Sender		string
+	Recipients	[]string
 }
 
 type TemplateData struct {
-	Message  *bytes.Buffer
-	Boundary string
+	Message		*bytes.Buffer
+	Boundary	string
 }
 
 func runEncrypt(cmd *Command, args []string) {
 	var err error
 	var e Envelope
 	var keys openpgp.EntityList
+    var log *Tee
 
-	log := NewTee("postcrypt")
-	id := generateRandomString()[:8]
-	log.Info("encrypting message with id " + id)
+    // generate 'unique' id for message
+	e.Id = generateRandomString()[:8]
+
+	log = NewTee("postcrypt")
+	log.Info("encrypting message with id " + e.Id)
 
 	if len(args) < 2 {
 		return
@@ -89,7 +93,7 @@ func runEncrypt(cmd *Command, args []string) {
 	e.Recipients = args[1:]
 	e.Mail, err = readMail()
 	if err != nil {
-		log.Crit(id + " could not parse mail: " + err.Error())
+		log.Crit(e.Id + " could not parse mail: " + err.Error())
 		return
 	}
 
@@ -97,28 +101,28 @@ func runEncrypt(cmd *Command, args []string) {
 		keys = getKeys(cmd.Config, e)
 		if len(keys) > 0 {
 			for _, k := range keys {
-				log.Info(id + " encrypting with key " + getKeyId(k))
+				log.Info(e.Id + " encrypting with key " + getKeyId(k))
 			}
 
 			var encrypted *bytes.Buffer
 			encrypted, err = encryptMail(e, keys)
 			if err != nil {
-				log.Err(id + "error encrypting mail. " + err.Error())
+				log.Err(e.Id + "error encrypting mail. " + err.Error())
 				sendMail(cmd.Config, e)
 			}
 
 			e = packMail(e, encrypted)
 		} else {
-			log.Info(id + " no keys found, sending unmodified")
+			log.Info(e.Id + " no keys found, sending unmodified")
 		}
 	} else {
-		log.Info(id + " already encrypted, sending unmodified")
-    }
+		log.Info(e.Id + " already encrypted, sending unmodified")
+	}
 
 	err = sendMail(cmd.Config, e)
-    if err != nil {
-        log.Crit(id + " sending mail failed. " + err.Error())
-    }
+	if err != nil {
+		log.Crit(e.Id + " sending mail failed. " + err.Error())
+	}
 }
 
 func readMail() (*mail.Message, error) {
@@ -220,8 +224,8 @@ func serializeMail(e Envelope) *bytes.Buffer {
 	}
 
 	// body
-    io.Copy(buffer, e.Mail.Body)
-    //fmt.Fprintf(buffer, "%s", e.Mail.Body.String())
+	io.Copy(buffer, e.Mail.Body)
+	//fmt.Fprintf(buffer, "%s", e.Mail.Body.String())
 
 	return buffer
 }
@@ -235,25 +239,25 @@ func sendMail(c *conf.ConfigFile, e Envelope) error {
 
 	conn, err = smtp.Dial(addr)
 	if err != nil {
-        return err
+		return err
 	}
 
 	if err = conn.Mail(e.Sender); err != nil {
-        return err
+		return err
 	}
 
 	for _, addr := range e.Recipients {
 		if err = conn.Rcpt(addr); err != nil {
-            return err
+			return err
 		}
 	}
 
 	w, err := conn.Data()
 	if err != nil {
-        return err
+		return err
 	}
 
 	io.Copy(w, serializeMail(e))
 	conn.Quit()
-    return nil
+	return nil
 }
