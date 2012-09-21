@@ -139,24 +139,26 @@ func isEncrypted(e Envelope) bool {
 }
 
 func getKeys(c *conf.ConfigFile, e Envelope) openpgp.EntityList {
+    var ids []string
 	var path string
 	var fh *os.File
 	var err error
-	var keyring openpgp.EntityList
+	var k openpgp.EntityList
 
-	path, _ = c.GetString("", "keyring")
+	path, _ = c.GetString("main", "keyring")
 
 	fh, err = os.Open(path)
 	if err != nil {
 		panic(err)
 	}
 
-	keyring, err = openpgp.ReadKeyRing(fh)
+	k, err = openpgp.ReadKeyRing(fh)
 	if err != nil {
 		panic(err)
 	}
 
-	return getKeysByEmail(keyring, e.Recipients)
+	ids = getIdsByEmails(c, k, e.Recipients)
+    return getKeysByIds(k, ids)
 }
 
 func encryptMail(e Envelope, keys openpgp.EntityList) (*bytes.Buffer, error) {
@@ -235,7 +237,7 @@ func sendMail(c *conf.ConfigFile, e Envelope) error {
 	var err error
 	var conn *smtp.Client
 
-	addr, _ = c.GetString("", "smtp")
+	addr, _ = c.GetString("main", "smtp")
 
 	conn, err = smtp.Dial(addr)
 	if err != nil {

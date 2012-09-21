@@ -28,6 +28,7 @@ type Command struct {
 var commands = []*Command{
 	cmdEncrypt,
 	cmdAddKey,
+    cmdShowKey,
 	cmdListKeys,
 }
 
@@ -78,11 +79,11 @@ func help(args []string) {
 }
 
 func validateConfig(c *conf.ConfigFile) error {
-	if _, err := c.GetString("", "smtp"); err != nil {
+	if _, err := c.GetString("main", "smtp"); err != nil {
 		return err
 	}
 
-	if _, err := c.GetString("", "keyring"); err != nil {
+	if _, err := c.GetString("main", "keyring"); err != nil {
 		return err
 	}
 

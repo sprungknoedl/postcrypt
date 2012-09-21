@@ -31,6 +31,19 @@ To print all keys postcrypt knows, see 'postcrypt help list-keys'.
 `,
 }
 
+var cmdShowKey = &Command{
+	Run: runShowKey,
+
+	Name:  "show-key",
+	Short: "prints details about a key",
+	Long: `
+Usage: postcrypt show-key <keyid>
+
+Help:
+Prints details of a key such as the key's identities.
+`,
+}
+
 var cmdListKeys = &Command{
 	Run: runListKeys,
 
@@ -50,7 +63,7 @@ func runAddKey(cmd *Command, args []string) {
 	var err error
 
 	log := NewTee("postcrypt")
-	path, _ := cmd.Config.GetString("", "keyring")
+	path, _ := cmd.Config.GetString("main", "keyring")
 
 	if len(args) < 1 {
 		log.Err("too few arguments. run `go help " + cmd.Name + "`.")
@@ -67,11 +80,47 @@ func runAddKey(cmd *Command, args []string) {
 	}
 }
 
+func runShowKey(cmd *Command, args []string) {
+    var err error
+
+    log := NewTee("postcrypt")
+    path, _ := cmd.Config.GetString("main", "keyring")
+
+	if len(args) < 1 {
+		log.Err("too few arguments. run `go help " + cmd.Name + "`.")
+		return
+	}
+
+    // open gpg keyring file
+    fh, _ := os.Open(path)
+    if err != nil {
+        log.Crit("could not open keyring: " + err.Error())
+        return
+    }
+
+    // read keyring
+    keyring, err := openpgp.ReadKeyRing(fh)
+    if err != nil {
+        log.Crit("could not read keyring: " + err.Error())
+        return
+    }
+
+    for _, entity := range keyring {
+        if args[0] == getKeyId(entity) {
+            fmt.Printf("%s:\n", getKeyId(entity))
+            for _, ident := range entity.Identities {
+                fmt.Printf("\t%s\n", ident.Name)
+            }
+        }
+    }
+}
+
 func runListKeys(cmd *Command, args []string) {
 	var err error
+    var emails []string
 
 	log := NewTee("postcrypt")
-	path, _ := cmd.Config.GetString("", "keyring")
+	path, _ := cmd.Config.GetString("main", "keyring")
 
 	// open gpg keyring file
 	fh, _ := os.Open(path)
@@ -87,10 +136,22 @@ func runListKeys(cmd *Command, args []string) {
 		return
 	}
 
-	for _, entity := range keyring {
-		fmt.Printf("%s:\n", getKeyId(entity))
-		for _, ident := range entity.Identities {
-			fmt.Printf("\t%s\n", ident.Name)
-		}
-	}
+    emails, _ = cmd.Config.GetOptions("keys")
+    emails = append(emails, getAllEmails(keyring)...)
+
+    fmt.Println("# Note: keys with (!!!) could not be found in keyring")
+
+    for _, e := range emails {
+        ids := getIdsByEmails(cmd.Config, keyring, []string{e})
+        fmt.Printf("%s = ", e)
+        for _, i := range ids {
+            if len(getKeysByIds(keyring, []string{i})) > 0 {
+                fmt.Printf("%s ", i)
+            } else {
+                fmt.Printf("%s(!!!) ", i)
+            }
+        }
+
+        fmt.Printf("\n")
+    }
 }

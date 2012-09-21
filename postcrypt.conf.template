@@ -1,4 +1,4 @@
-[default]
+[main]
 # Address where postcrypt should forward mails to.
 # This should be the same as you configured in
 # postfix's master.cf, or else you will loose mails.
@@ -8,3 +8,18 @@ smtp = 127.0.0.1:10029
 # It is recommend to place this in the home directory
 # of your dedicated postcrypt user
 keyring = /var/lib/postcrypt/keyring.gpg
+
+[keys]
+# will be encrypted with key ABCD1234, regardless if another 
+# matchin key is in keyring
+test1@example.com = ABCD1234
+
+# will be encrypted with keys ABCD1234 and 9876ABCD, regardless if 
+# another matching key is in keyring
+test2@example.com = ABCD1234 9876ABCD
+
+# will not be encrypted, even if matching key is in keyring
+test3@example.com =
+
+# all other mails will be encrypted if matching key
+# is in keyring, otherwise not.
