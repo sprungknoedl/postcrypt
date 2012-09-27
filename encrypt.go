@@ -225,6 +225,8 @@ func serializeMail(e Envelope) *bytes.Buffer {
 		}
 	}
 
+	fmt.Fprintln(buffer, "")
+
 	// body
 	io.Copy(buffer, e.Mail.Body)
 	//fmt.Fprintf(buffer, "%s", e.Mail.Body.String())
