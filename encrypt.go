@@ -40,46 +40,49 @@ To add keys, see 'postcrypt help add-key'.
 
 // template for mail header Content-Type.
 var MailHeaderTpl = template.Must(template.New("content type").Parse(
-	"multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"----postfix-{{ .Boundary }}\""))
+	"multipart/encrypted; protocol=\"application/pgp-encrypted\"; boundary=\"----postcrypt-{{ .Boundary }}\""))
 
 // template for pgp/mime formated mail
 var MailBodyTpl = template.Must(template.New("mail body").Parse(`
 This is an OpenPGP/MIME encrypted message (RFC 2440 and 3156)
-----postfix-{{ .Boundary }}
+----postcrypt-{{ .Boundary }}
 Content-Type: application/pgp-encrypted
 Content-Description: PGP/MIME version identification
 
 Version: 1
 
-----postfix-{{ .Boundary }}
+----postcrypt-{{ .Boundary }}
 Content-Type: application/octet-stream; name="encrypted.asc"
 Content-Description: OpenPGP encrypted message
 Content-Disposition: inline; filename="encrypted.asc"
 
 {{ .Message }}
 
-----postfix-{{ .Boundary }}--
+----postcrypt-{{ .Boundary }}--
 `))
 
 type Envelope struct {
-	Id			string
-	Mail		*mail.Message
-	Sender		string
-	Recipients	[]string
+	Id         string
+	Mail       *mail.Message
+	Sender     string
+	Recipients []string
 }
 
 type TemplateData struct {
-	Message		*bytes.Buffer
-	Boundary	string
+	Message  *bytes.Buffer
+	Boundary string
 }
 
 func runEncrypt(cmd *Command, args []string) {
 	var err error
 	var e Envelope
 	var keys openpgp.EntityList
-    var log *Tee
+	var msg *mail.Message
+	var sender string
+	var recipients []string
+	var log *Tee
 
-    // generate 'unique' id for message
+	// generate 'unique' id for message
 	e.Id = generateRandomString()[:8]
 
 	log = NewTee("postcrypt")
@@ -89,40 +92,47 @@ func runEncrypt(cmd *Command, args []string) {
 		return
 	}
 
-	e.Sender = args[0]
-	e.Recipients = args[1:]
-	e.Mail, err = readMail()
+	sender = args[0]
+	recipients = args[1:]
+	msg, err = readMail()
 	if err != nil {
 		log.Crit(e.Id + " could not parse mail: " + err.Error())
 		return
 	}
 
 	if !isEncrypted(e) {
-		keys = getKeys(cmd.Config, e)
-		if len(keys) > 0 {
-			for _, k := range keys {
-				log.Info(e.Id + " encrypting with key " + getKeyId(k))
+		for _, rcpt := range recipients {
+			e.Sender = sender
+			e.Recipients = []string{rcpt}
+			e.Mail = msg
+
+			keys = getKeys(cmd.Config, e)
+			if len(keys) > 0 {
+				for _, k := range keys {
+					log.Info(e.Id + " encrypting with key " + getKeyId(k) + " for " + rcpt)
+				}
+
+				var encrypted *bytes.Buffer
+				encrypted, err = encryptMail(e, keys)
+				if err != nil {
+					log.Err(e.Id + "error encrypting mail. " + err.Error())
+					sendMail(cmd.Config, e)
+				}
+
+				e = packMail(e, encrypted)
+			} else {
+				log.Info(e.Id + " no keys found, sending unmodified")
 			}
 
-			var encrypted *bytes.Buffer
-			encrypted, err = encryptMail(e, keys)
+			err = sendMail(cmd.Config, e)
 			if err != nil {
-				log.Err(e.Id + "error encrypting mail. " + err.Error())
-				sendMail(cmd.Config, e)
+				log.Crit(e.Id + " sending mail failed. " + err.Error())
 			}
-
-			e = packMail(e, encrypted)
-		} else {
-			log.Info(e.Id + " no keys found, sending unmodified")
 		}
 	} else {
 		log.Info(e.Id + " already encrypted, sending unmodified")
 	}
 
-	err = sendMail(cmd.Config, e)
-	if err != nil {
-		log.Crit(e.Id + " sending mail failed. " + err.Error())
-	}
 }
 
 func readMail() (*mail.Message, error) {
@@ -139,7 +149,7 @@ func isEncrypted(e Envelope) bool {
 }
 
 func getKeys(c *conf.ConfigFile, e Envelope) openpgp.EntityList {
-    var ids []string
+	var ids []string
 	var path string
 	var fh *os.File
 	var err error
@@ -158,7 +168,7 @@ func getKeys(c *conf.ConfigFile, e Envelope) openpgp.EntityList {
 	}
 
 	ids = getIdsByEmails(c, k, e.Recipients)
-    return getKeysByIds(k, ids)
+	return getKeysByIds(k, ids)
 }
 
 func encryptMail(e Envelope, keys openpgp.EntityList) (*bytes.Buffer, error) {

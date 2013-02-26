@@ -1,16 +1,16 @@
 package main
 
 import (
-	"io"
-	"os"
-	"fmt"
-	"time"
-    "strings"
-	"log/syslog"
 	"crypto/sha1"
+	"fmt"
+	"io"
+	"log/syslog"
+	"os"
+	"strings"
+	"time"
 
-	"code.google.com/p/goconf/conf"
 	"code.google.com/p/go.crypto/openpgp"
+	"code.google.com/p/goconf/conf"
 )
 
 type Tee struct {
@@ -65,25 +65,25 @@ func getKeyId(k *openpgp.Entity) string {
 func getAllEmails(k openpgp.EntityList) (emails []string) {
 	for _, entity := range k {
 		for _, identity := range entity.Identities {
-            emails = append(emails, identity.UserId.Email)
+			emails = append(emails, identity.UserId.Email)
 		}
 	}
 
-    return emails
+	return emails
 }
 
 func getIdsByEmails(c *conf.ConfigFile, k openpgp.EntityList, emails []string) (ids []string) {
-    var emailsLeft []string
+	var emailsLeft []string
 
-    for _, email := range emails {
-        if c.HasOption("keys", email) {
-            line, _ := c.GetString("keys", email)
-            parts := strings.Fields(line)
-            ids = append(ids, parts...)
-        } else {
-            emailsLeft = append(emailsLeft, email)
-        }
-    }
+	for _, email := range emails {
+		if c.HasOption("keys", email) {
+			line, _ := c.GetString("keys", email)
+			parts := strings.Fields(line)
+			ids = append(ids, parts...)
+		} else {
+			emailsLeft = append(emailsLeft, email)
+		}
+	}
 
 	for _, entity := range k {
 		for _, identity := range entity.Identities {
@@ -96,17 +96,17 @@ func getIdsByEmails(c *conf.ConfigFile, k openpgp.EntityList, emails []string) (
 		}
 	}
 
-    return ids
+	return ids
 }
 
 func getKeysByIds(k openpgp.EntityList, ids []string) (keys openpgp.EntityList) {
 	for _, entity := range k {
-        for _, i := range ids {
-            if i == getKeyId(entity) {
-                keys = append(keys, entity)
-                continue // enough if one addr per key matches
-            }
-        }
+		for _, i := range ids {
+			if i == getKeyId(entity) {
+				keys = append(keys, entity)
+				continue // enough if one addr per key matches
+			}
+		}
 	}
 
 	return keys

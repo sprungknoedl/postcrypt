@@ -28,7 +28,7 @@ type Command struct {
 var commands = []*Command{
 	cmdEncrypt,
 	cmdAddKey,
-    cmdShowKey,
+	cmdShowKey,
 	cmdListKeys,
 }
 
@@ -96,7 +96,7 @@ var cfgPath = flag.String("config", "/etc/postcrypt.conf", "specify an alternati
 func main() {
 	var err error
 	var args []string
-    var config *conf.ConfigFile
+	var config *conf.ConfigFile
 
 	log := NewTee("postcrypt")
 
@@ -136,7 +136,7 @@ func main() {
 	// execute command
 	for _, cmd := range commands {
 		if cmd.Name == args[0] && cmd.Run != nil {
-            cmd.Config = config
+			cmd.Config = config
 			cmd.Run(cmd, args[1:])
 			return
 		}
