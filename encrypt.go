@@ -100,11 +100,12 @@ func runEncrypt(cmd *Command, args []string) {
 		return
 	}
 
+	e.Sender = sender
+	e.Mail = msg
+	
 	if !isEncrypted(e) {
 		for _, rcpt := range recipients {
-			e.Sender = sender
 			e.Recipients = []string{rcpt}
-			e.Mail = msg
 
 			keys = getKeys(cmd.Config, e)
 			if len(keys) > 0 {
